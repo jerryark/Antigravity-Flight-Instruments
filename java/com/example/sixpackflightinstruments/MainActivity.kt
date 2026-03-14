@@ -216,9 +216,16 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener,
         lastAltRaw = altRaw
         lastTimeVsi = now
         if (_state.value.isDemoMode) return
+        
+        // --- HARDWARE GPS SMOOTHING (Low-Pass Filter) ---
+        // Aplicamos un filtro matemático suave en tiempo real en lugar de una animación de UI.
+        // Esto previene el jitter de alta frecuencia pero permite cambios sutiles (ej: subir escaleras).
+        val currentAlt = _state.value.altitude - _state.value.kollsmanOffset // Obtenemos el valor puro anterior
+        val smoothedAlt = currentAlt * 0.85 + altRaw * 0.15 // 85% viejo, 15% nuevo
+
         _state.value = _state.value.copy(
-            speed = spdKts, altitude = altRaw + _state.value.kollsmanOffset,
-            gpsStatus = "GPS: OK", maxSpeed = maxOf(_state.value.maxSpeed, spdKts), maxAlt = maxOf(_state.value.maxAlt, altRaw + _state.value.kollsmanOffset)
+            speed = spdKts, altitude = smoothedAlt + _state.value.kollsmanOffset,
+            gpsStatus = "GPS: OK", maxSpeed = maxOf(_state.value.maxSpeed, spdKts), maxAlt = maxOf(_state.value.maxAlt, smoothedAlt + _state.value.kollsmanOffset)
         )
     }
 }
@@ -341,15 +348,18 @@ fun LegalDialog(onDismiss: () -> Unit) {
         textContentColor = Color.LightGray
     )
 }
+
 @Composable
 fun FlightDashboard(s: FlightData, instSize: Dp, isLandscape: Boolean, btnFs: TextUnit, fontFactor: Float, isTablet: Boolean, onNightToggle: () -> Unit, onCalibrate: () -> Unit, onKollsmanChange: (Float) -> Unit, onLoggingToggle: () -> Unit, onDemoToggle: () -> Unit) {
     var showLegal by remember { mutableStateOf(false) }
     if (showLegal) LegalDialog { showLegal = false }
+
     // Generar posiciones una sola vez para ahorrar CPU
     val starPositions = remember {
         val rnd = java.util.Random(10)
         List(2000) { Offset(rnd.nextFloat(), rnd.nextFloat()) }
     }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -433,6 +443,8 @@ fun FlightDashboard(s: FlightData, instSize: Dp, isLandscape: Boolean, btnFs: Te
         }
     }
 }
+
+
 @Composable
 fun ProButton(text: String, color: Color, fontSize: TextUnit, onClick: () -> Unit) {
     val paddingSide = if (fontSize.value > 10f) 18.dp else 12.dp
